@@ -10,12 +10,14 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <errno.h>
 #include <sys/netmgr.h>
 #include <sys/neutrino.h>
 #include <sys/iofunc.h>
 #include <sys/dispatch.h>
 #define NANO 1000000000
 #define MY_PULSE_CODE _PULSE_CODE_MINAVAIL
+#define PAUSE_PULSE 1
 typedef union{
 	struct _pulse pulse;
 	char msg[128];
@@ -29,7 +31,7 @@ typedef struct DataTable {
 
 int checkInput(int TST, int TSB);
 int argCheck(int arg);
-
+//volatile int MY_PULSE_CODE;
 DataTableRow t[] = {
 		{2,4,4,"|1&2&"},
 		{3,4,6,"|1&2&3&"},
@@ -51,7 +53,87 @@ char data[255];
 int server_coid;
 ///////////////////THREAD//////////////////////////
 void* metronome_thread(void* arg){
+	struct sigevent         event;
+	struct itimerspec       itime;
+	timer_t                 timer_id;
+	int                     chid;
+	int                     rcvid;
+	my_message_t            msg;
+	name_attach_t *attach;
+	attach = name_attach(NULL, "metronome",0);
+	if(attach == NULL){
+		perror("Name attach failed");
+		return EXIT_FAILURE;
+	}
+	chid = ChannelCreate(0);
 
+
+	event.sigev_notify = SIGEV_PULSE;
+
+	event.sigev_coid = ConnectAttach(ND_LOCAL_NODE, 0,
+			attach->chid,
+			_NTO_SIDE_CHANNEL, 0);
+
+	event.sigev_priority = SIGEV_PULSE_PRIO_INHERIT;
+
+	event.sigev_code = MY_PULSE_CODE;
+	timer_create(CLOCK_REALTIME, &event, &timer_id);
+	//printf("%f\n",SPI);
+	/* 500 million nsecs = .5 secs */
+	itime.it_value.tv_nsec = 1;
+	itime.it_interval.tv_sec= 0;//time until timer resets
+	/* 500 million nsecs = .5 secs */
+	itime.it_interval.tv_nsec = SPI*NANO;
+	timer_settime(timer_id, 0, &itime, NULL);
+
+	/*
+	 * As of the timer_settime(), we will receive our pulse
+	 * in 1.5 seconds (the itime.it_value) and every 1.5
+	 * seconds thereafter (the itime.it_interval)
+	 */
+
+	int i = 0;
+	int value;
+
+	for (;;) {
+		rcvid = MsgReceive(attach->chid, &msg, sizeof(msg), NULL);
+		if (rcvid == 0) { /* we got a pulse */
+			//printf("%d",msg.pulse.code);
+			switch(msg.pulse.code){
+			case MY_PULSE_CODE: {
+				if(i > strlen(t[patternIndex].pattern)){
+					i = 0;
+					printf("\n");
+				}else{
+
+					if(i == 0){
+						printf("%c",t[patternIndex].pattern[0]);
+						printf("%c",t[patternIndex].pattern[1]);
+						i++;
+					}else{
+						printf("%c",t[patternIndex].pattern[i]);
+					}
+					fflush(stdout);
+					i++;
+				}
+			break;
+			}
+			case PAUSE_PULSE:
+
+			value = msg.pulse.value.sival_int;
+			printf("<Pausing %d>\n", value);
+			itime.it_value.tv_nsec = value*NANO;
+			timer_settime(timer_id, 0, &itime, NULL);
+
+			delay(value*1000);
+			break;
+			}
+		} /* else other messages ... */
+	}
+
+	// Phase III
+	ConnectDetach( event.sigev_coid );
+	ChannelDestroy( chid );
 	//	printf("%c", t[patternIndex].pattern[i]);
 	printf("%d\n",timerVal);
 
@@ -68,6 +150,7 @@ int io_read(resmgr_context_t *ctp, io_read_t *msg, RESMGR_OCB_T *ocb) {
 	//test to see if we have already sent the whole message.
 	if (ocb->offset == nb)
 		return 0;
+	//	printf("[Metronome: %.0f beats/min, time signature %.0f/%.0f, sec-per-interval: %.2f, nanoSecs: %d]\n",BPM,TST,TSB,SPI, timerVal);
 
 	//We will return which ever is smaller the size of our data or the size of the buffer
 	nb = min(nb, msg->i.nbytes);
@@ -98,15 +181,17 @@ int io_write(resmgr_context_t *ctp, io_write_t *msg, RESMGR_OCB_T *ocb) {
 		int i, small_integer;
 		buf = (char *) (msg + 1);
 
-		if (strstr(buf, "alert") != NULL) {
+		if (strstr(buf, "pause") != NULL) {
+
 			for (i = 0; i < 2; i++) {
 				alert_msg = strsep(&buf, " ");
 			}
 			small_integer = atoi(alert_msg);
 			if (small_integer >= 1 && small_integer <= 99) {
 				//FIXME :: replace getprio() with SchedGet()
+				//printf("\nSending pulse\n");
 				MsgSendPulse(server_coid, SchedGet(0, 0, NULL),
-						_PULSE_CODE_MINAVAIL, small_integer);
+						PAUSE_PULSE, small_integer);
 			} else {
 				printf("Integer is not between 1 and 99.\n");
 			}
@@ -136,7 +221,6 @@ int io_open(resmgr_context_t *ctp, io_open_t *msg, RESMGR_HANDLE_T *handle,
 
 
 int main(int argc, char* argv[]) {
-
 	if (argCheck(argc)) {
 		fprintf(stderr, "Invalid number of argument\n");
 		return EXIT_FAILURE;
@@ -154,14 +238,13 @@ int main(int argc, char* argv[]) {
 	}
 	SPI = (SPM/t[patternIndex].NIB);
 	timerVal = SPI*NANO;
-	printf("[Metronome: %.0f beats/min, time signature %.0f/%.0f, sec-per-interval: %.2f, nanoSecs: %d]\n",BPM,TST,TSB,SPI, timerVal);
 
 	dispatch_t* dpp;
 	resmgr_io_funcs_t io_funcs;	resmgr_connect_funcs_t connect_funcs;
 	iofunc_attr_t ioattr;
 	dispatch_context_t *ctp;
 	int id;
-
+	snprintf(data, 255,"[Metronome: %.0f beats/min, time signature %.0f/%.0f, sec-per-interval: %.2f, nanoSecs: %d]\n",BPM,TST,TSB,SPI, timerVal );
 	if ((dpp = dispatch_create()) == NULL) {
 		fprintf(stderr, "%s:  Unable to allocate dispatch context.\n", argv[0]);
 		return (EXIT_FAILURE);
