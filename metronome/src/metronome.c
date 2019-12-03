@@ -186,6 +186,7 @@ int io_write(resmgr_context_t *ctp, io_write_t *msg, RESMGR_OCB_T *ocb) {
 			for (i = 0; i < 2; i++) {
 				alert_msg = strsep(&buf, " ");
 			}
+			//////ALSO ADD A CHECK FOR QUIT MESSAGE///////
 			small_integer = atoi(alert_msg);
 			if (small_integer >= 1 && small_integer <= 99) {
 				//FIXME :: replace getprio() with SchedGet()
