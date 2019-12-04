@@ -80,17 +80,12 @@ void* metronome_thread(void* arg){
 	timer_create(CLOCK_REALTIME, &event, &timer_id);
 	//printf("%f\n",SPI);
 	/* 500 million nsecs = .5 secs */
-	itime.it_value.tv_nsec = 1;
-	itime.it_interval.tv_sec= 0;//time until timer resets
+	itime.it_value.tv_nsec = SPI*NANO;
+	itime.it_interval.tv_sec = 0;//time until timer resets
 	/* 500 million nsecs = .5 secs */
 	itime.it_interval.tv_nsec = SPI*NANO;
 	timer_settime(timer_id, 0, &itime, NULL);
 
-	/*
-	 * As of the timer_settime(), we will receive our pulse
-	 * in 1.5 seconds (the itime.it_value) and every 1.5
-	 * seconds thereafter (the itime.it_interval)
-	 */
 
 	int i = 0;
 	int value;
@@ -121,11 +116,13 @@ void* metronome_thread(void* arg){
 			case PAUSE_PULSE:
 
 			value = msg.pulse.value.sival_int;
-			printf("<Pausing %d>\n", value);
-			itime.it_value.tv_nsec = value*NANO;
+			printf("<Pausing %d>", value);
+			fflush(stdout);
+			itime.it_interval.tv_nsec = 0;
 			timer_settime(timer_id, 0, &itime, NULL);
-
 			delay(value*1000);
+			itime.it_interval.tv_nsec = SPI*NANO;
+			timer_settime(timer_id,0, &itime, NULL);
 			break;
 			}
 		} /* else other messages ... */
