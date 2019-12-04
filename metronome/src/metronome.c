@@ -23,6 +23,7 @@ typedef union{
 	struct _pulse pulse;
 	char msg[128];
 }my_message_t;
+my_message_t            msg;
 typedef struct DataTable {
 	int TST;
 	int TSB;
@@ -57,16 +58,16 @@ void* metronome_thread(void* arg){
 	struct sigevent         event;
 	struct itimerspec       itime;
 	timer_t                 timer_id;
-	int                     chid;
+	//int                     chid;
 	int                     rcvid;
-	my_message_t            msg;
+
 	name_attach_t *attach;
 	attach = name_attach(NULL, "metronome",0);
 	if(attach == NULL){
 		perror("Name attach failed");
 		return EXIT_FAILURE;
 	}
-	chid = ChannelCreate(0);
+	//chid = ChannelCreate(0);
 
 
 	event.sigev_notify = SIGEV_PULSE;
@@ -125,15 +126,18 @@ void* metronome_thread(void* arg){
 			itime.it_interval.tv_nsec = SPI*NANO;
 			timer_settime(timer_id,0, &itime, NULL);
 			break;
+			case QUIT_PULSE: name_detach(attach,0);return NULL;
 			}
+
 		} /* else other messages ... */
+
 	}
 
 	// Phase III
 	ConnectDetach( event.sigev_coid );
-	ChannelDestroy( chid );
+	//ChannelDestroy( chid );
 	//	printf("%c", t[patternIndex].pattern[i]);
-	printf("%d\n",timerVal);
+	//printf("%d\n",timerVal);
 
 
 
@@ -196,8 +200,10 @@ int io_write(resmgr_context_t *ctp, io_write_t *msg, RESMGR_OCB_T *ocb) {
 			}
 		}else if(strstr(buf, "quit") != NULL){
 			MsgSendPulse(server_coid, SchedGet(0, 0, NULL),QUIT_PULSE, 0);
-		}else {
 		}
+
+		else {
+			printf("Invalid input\n");
 			strcpy(data, buf);
 		}
 
@@ -278,9 +284,12 @@ int main(int argc, char* argv[]) {
 	while (1) {
 		ctp = dispatch_block(ctp);
 		dispatch_handler(ctp);
+		if(msg.pulse.code == QUIT_PULSE){
+			break;
+		}
 	}
 
-
+	printf("\nExiting\n");
 
 
 	return EXIT_SUCCESS;
