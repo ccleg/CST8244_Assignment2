@@ -134,7 +134,7 @@ void* metronome_thread(void* arg){
 			itime.it_interval.tv_nsec = SPI*NANO;
 			timer_settime(timer_id,0, &itime, NULL);
 			break;
-			case QUIT_PULSE: name_detach(attach,0);return NULL;
+			case QUIT_PULSE: name_detach(attach,0); timer_delete(timer_id);return NULL;
 			}
 
 		} /* else other messages ... */
