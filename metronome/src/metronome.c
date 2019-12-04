@@ -15,6 +15,15 @@
 #include <sys/neutrino.h>
 #include <sys/iofunc.h>
 #include <sys/dispatch.h>
+
+/*************************************
+Filename: metronome.c
+Author : Cory Chenier & Vicknesh Babu
+Assignment : 2
+Date : December 3rd 2019
+Professor : Gerry Hurdle
+**************************************/
+
 #define NANO 1000000000
 #define MY_PULSE_CODE _PULSE_CODE_MINAVAIL
 #define PAUSE_PULSE 1
