@@ -18,6 +18,7 @@
 #define NANO 1000000000
 #define MY_PULSE_CODE _PULSE_CODE_MINAVAIL
 #define PAUSE_PULSE 1
+#define QUIT_PULSE 2
 typedef union{
 	struct _pulse pulse;
 	char msg[128];
@@ -193,7 +194,10 @@ int io_write(resmgr_context_t *ctp, io_write_t *msg, RESMGR_OCB_T *ocb) {
 			} else {
 				printf("Integer is not between 1 and 99.\n");
 			}
-		} else {
+		}else if(strstr(buf, "quit") != NULL){
+			MsgSendPulse(server_coid, SchedGet(0, 0, NULL),QUIT_PULSE, 0);
+		}else {
+		}
 			strcpy(data, buf);
 		}
 
