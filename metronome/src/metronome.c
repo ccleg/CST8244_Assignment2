@@ -60,7 +60,6 @@ void* metronome_thread(void* arg){
 	timer_t                 timer_id;
 	//int                     chid;
 	int                     rcvid;
-
 	name_attach_t *attach;
 	attach = name_attach(NULL, "metronome",0);
 	if(attach == NULL){
